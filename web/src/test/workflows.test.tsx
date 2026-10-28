@@ -161,6 +161,32 @@ describe('Demo-mode happy path', () => {
     // Never silently shows fabricated data: no error alert in the happy path.
     expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
   });
+
+  it('shows prop-firm accounts, summary, and a ledger (M6.4)', async () => {
+    const user = userEvent.setup();
+    window.history.pushState({}, '', '/propfirm');
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: /Prop Firms/i })).toBeInTheDocument();
+    expect(await screen.findByText('Fees paid')).toBeInTheDocument(); // summary tile
+    await user.click(await screen.findByText('FTMO')); // seeded account
+    expect(await screen.findByText('Cash-flow ledger')).toBeInTheDocument();
+    // the seeded payout appears as a signed amount in the ledger (unique to the row)
+    expect(await screen.findByText('+$2,300.00')).toBeInTheDocument();
+  });
+
+  it('creates a prop account and rejects a firmless one (M6.4)', async () => {
+    const user = userEvent.setup();
+    window.history.pushState({}, '', '/propfirm');
+    render(<App />);
+    await screen.findByRole('heading', { name: /Prop Firms/i });
+    await user.click(screen.getByRole('button', { name: /New account/i }));
+    let dialog = await screen.findByRole('dialog', { name: /New prop account/i });
+    await user.click(within(dialog).getByRole('button', { name: /Create account/i }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/firm is required/i);
+    fireEvent.change(within(dialog).getByLabelText('Firm'), { target: { value: 'MyFundedFutures' } });
+    await user.click(within(dialog).getByRole('button', { name: /Create account/i }));
+    await waitFor(() => expect(screen.getByText('MyFundedFutures')).toBeInTheDocument());
+  });
 });
 
 describe('API error state (authenticated session, data fetch fails)', () => {

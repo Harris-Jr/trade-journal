@@ -121,6 +121,22 @@ from public evidence. UI and advanced modules layer on top.
 - Web: `/insights` page and nav entry with severity-grouped flags, a per-type summary, drill-through to
   the flagged trade, honest empty states (no trades vs no flags), and a correlation-not-causation note.
 
+### M6.4 - Prop-firm tracking (done)
+- Manual prop-firm tracking in two user-scoped tables (migration v7): `prop_accounts` (firm, program,
+  account size, status evaluation/funded/passed/failed/breached, phase, rule reference: profit target,
+  max drawdown, daily loss limit, optional link to a trading account, started date, notes) and
+  `prop_transactions` (a signed cash-flow ledger: negative = fee cost, positive = payout/refund).
+- Independent of the canonical trade engine: the ledger is the user's own record and never mixes into
+  trade P&L. `src/analytics/propfirm.ts` sums cost, payout and net per account and across the portfolio
+  (with status counts); missing data is zero, never invented.
+- API (all owner-scoped): `GET /propfirm/summary`, `GET/POST /propfirm/accounts`,
+  `GET/PUT/DELETE /propfirm/accounts/:id`, `POST /propfirm/accounts/:id/transactions`,
+  `DELETE /propfirm/transactions/:id`. Deleting a prop account also removes its own ledger entries
+  (user-entered, not trade history); no trade, execution or annotation is ever touched.
+- Web: `/propfirm` list with a portfolio summary and per-account net, and `/propfirm/:id` detail with
+  rule fields, totals, and an add/delete cash-flow ledger. Create/edit via a sheet. Nav entry added.
+  Automatic bank/firm (Plaid) sync is intentionally out of scope.
+
 ### M6+ - Advanced modules (prioritized)
 1. Progress Tracker (rule adherence) - high value, low complexity.
 2. Playbook analytics surfacing (M1 already computes per-group stats).

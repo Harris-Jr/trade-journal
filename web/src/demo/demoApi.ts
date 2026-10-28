@@ -12,10 +12,13 @@ import { importExecutionsFromCsv } from '@core/import/genericCsv.js';
 import { evaluateGoal, METRIC_DEFS } from '@core/analytics/progress.js';
 import { playbookAnalytics } from '@core/analytics/playbook.js';
 import { computeInsights } from '@core/analytics/insights.js';
+import { propSummary, accountTotals } from '@core/analytics/propfirm.js';
 import type { Execution as CoreExecution } from '@core/domain/types.js';
 import type {
   Goal, GoalWithProgress, GoalInput, GoalPatch,
   Playbook, PlaybookDetail, PlaybookData, PlaybookListOpts, PlaybookAnalytics,
+  PropAccount, PropTransaction, PropAccountData, PropAccountStatus, PropTransactionKind,
+  PropSummary, PropAccountWithTotals, PropAccountDetail,
 } from '../api/types.js';
 
 const DEMO_PLAYBOOK_ID = 'demo-pb-1';
@@ -118,6 +121,15 @@ export function createDemoApi(): Api {
   const tags: Tag[] = TAGS.map((t, i) => ({ id: `tag-${i}`, label: t, category: 'custom' as const }));
   const savedFilters: SavedFilter[] = [];
   const nowSeed = Date.now();
+  const propAccounts: PropAccount[] = [
+    { id: 'demo-prop-1', userId: 'demo', firm: 'FTMO', program: '100K 2-step', accountSize: 100000, status: 'funded', phase: 'Funded', profitTarget: 10000, maxDrawdown: 10000, dailyLossLimit: 5000, startedAt: nowSeed - 90 * 86400000, createdAt: nowSeed - 90 * 86400000, updatedAt: nowSeed },
+    { id: 'demo-prop-2', userId: 'demo', firm: 'Topstep', program: '50K', accountSize: 50000, status: 'evaluation', phase: 'Phase 1', startedAt: nowSeed - 20 * 86400000, createdAt: nowSeed - 20 * 86400000, updatedAt: nowSeed },
+  ];
+  const propTxns: PropTransaction[] = [
+    { id: 'demo-ptx-1', userId: 'demo', propAccountId: 'demo-prop-1', timestamp: nowSeed - 90 * 86400000, amount: -540, kind: 'evaluation_fee', createdAt: nowSeed },
+    { id: 'demo-ptx-2', userId: 'demo', propAccountId: 'demo-prop-1', timestamp: nowSeed - 10 * 86400000, amount: 2300, kind: 'payout', createdAt: nowSeed },
+    { id: 'demo-ptx-3', userId: 'demo', propAccountId: 'demo-prop-2', timestamp: nowSeed - 20 * 86400000, amount: -165, kind: 'evaluation_fee', createdAt: nowSeed },
+  ];
   const goals: Goal[] = [
     { id: 'demo-goal-1', userId: 'demo', accountId: DEMO_ACCOUNT_ID, metric: 'net_pnl', period: 'weekly', direction: 'at_least', target: 1000, status: 'active', startAt: nowSeed - 60 * 86400000, createdAt: nowSeed, updatedAt: nowSeed },
     { id: 'demo-goal-2', userId: 'demo', accountId: DEMO_ACCOUNT_ID, metric: 'journaled_day_rate', period: 'weekly', direction: 'at_least', target: 80, status: 'active', startAt: nowSeed - 60 * 86400000, createdAt: nowSeed, updatedAt: nowSeed },
@@ -389,6 +401,41 @@ export function createDemoApi(): Api {
       const jrn = journal.filter((jj) => jj.accountId === accountId);
       return delay(computeInsights(t as never, jrn as never, opts?.tz ?? 'UTC', opts?.thresholds ?? {}) as unknown as import('../api/types.js').InsightsResult);
     },
+
+    getPropSummary: () => delay(propSummary(propAccounts as never, propTxns as never) as unknown as PropSummary),
+    listPropAccounts: (status?: PropAccountStatus) => {
+      const list = (status ? propAccounts.filter((a) => a.status === status) : propAccounts)
+        .map((a) => ({ ...a, totals: accountTotals(a.id, propTxns as never) }));
+      return delay(list as unknown as PropAccountWithTotals[]);
+    },
+    getPropAccount: (id) => {
+      const a = propAccounts.find((x) => x.id === id);
+      if (!a) return Promise.reject(new Error('prop account not found'));
+      return delay({ ...a, totals: accountTotals(a.id, propTxns as never), transactions: propTxns.filter((t) => t.propAccountId === id) } as unknown as PropAccountDetail);
+    },
+    createPropAccount: (data: PropAccountData) => {
+      const now = Date.now();
+      const a: PropAccount = { ...data, id: `prop-${propAccounts.length}-${now}`, userId: 'demo', status: data.status ?? 'evaluation', createdAt: now, updatedAt: now };
+      propAccounts.push(a);
+      return delay(a);
+    },
+    updatePropAccount: (id, patch) => {
+      const a = propAccounts.find((x) => x.id === id);
+      if (!a) return Promise.reject(new Error('prop account not found'));
+      Object.assign(a, patch, { updatedAt: Date.now() });
+      return delay(a);
+    },
+    deletePropAccount: (id) => {
+      const i = propAccounts.findIndex((x) => x.id === id);
+      if (i >= 0) { propAccounts.splice(i, 1); for (let k = propTxns.length - 1; k >= 0; k--) if (propTxns[k]!.propAccountId === id) propTxns.splice(k, 1); }
+      return delay({ deleted: i >= 0 });
+    },
+    addPropTransaction: (accountId, txn) => {
+      const t: PropTransaction = { id: `ptx-${propTxns.length}-${Date.now()}`, userId: 'demo', propAccountId: accountId, timestamp: txn.timestamp ?? Date.now(), amount: txn.amount, kind: txn.kind, note: txn.note, createdAt: Date.now() };
+      propTxns.push(t);
+      return delay(t);
+    },
+    deletePropTransaction: (txId) => { const i = propTxns.findIndex((x) => x.id === txId); if (i >= 0) propTxns.splice(i, 1); return delay({ deleted: i >= 0 }); },
   };
 
   function countLinked(pid: string): number {

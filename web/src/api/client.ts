@@ -6,6 +6,7 @@ import type {
   Goal, GoalWithProgress, GoalInput, GoalPatch,
   Playbook, PlaybookDetail, PlaybookData, PlaybookListOpts, PlaybookAnalytics,
   InsightsResult, InsightThresholds,
+  PropSummary, PropAccountWithTotals, PropAccountDetail, PropAccount, PropAccountData, PropAccountStatus, PropTransaction, PropTransactionKind,
 } from './types.js';
 
 export class ApiError extends Error {
@@ -159,6 +160,16 @@ export const httpApi: Api = {
       revengeSizeMultiple: th.revengeSizeMultiple, oversizedLossMultiple: th.oversizedLossMultiple,
     })}`);
   },
+
+  getPropSummary: () => request<PropSummary>('GET', '/propfirm/summary'),
+  listPropAccounts: (status?: PropAccountStatus) => request<PropAccountWithTotals[]>('GET', `/propfirm/accounts${qs({ status })}`),
+  getPropAccount: (id) => request<PropAccountDetail>('GET', `/propfirm/accounts/${encodeURIComponent(id)}`),
+  createPropAccount: (data: PropAccountData) => request<PropAccount>('POST', '/propfirm/accounts', data),
+  updatePropAccount: (id, patch) => request<PropAccount>('PUT', `/propfirm/accounts/${encodeURIComponent(id)}`, patch),
+  deletePropAccount: (id) => request<{ deleted: boolean }>('DELETE', `/propfirm/accounts/${encodeURIComponent(id)}`),
+  addPropTransaction: (accountId, txn: { amount: number; kind: PropTransactionKind; note?: string; timestamp?: number }) =>
+    request<PropTransaction>('POST', `/propfirm/accounts/${encodeURIComponent(accountId)}/transactions`, txn),
+  deletePropTransaction: (txId) => request<{ deleted: boolean }>('DELETE', `/propfirm/transactions/${encodeURIComponent(txId)}`),
 };
 
 export type { Api, AccountKind, ExecutionInput, InstrumentType, ReportDimension, SortBy, TradeAnnotations };

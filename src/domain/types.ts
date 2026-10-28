@@ -223,6 +223,47 @@ export interface Goal {
   updatedAt: number;
 }
 
+/**
+ * Prop-firm tracking (M6.4). A prop account is a user-managed record of an
+ * evaluation or funded account at a prop firm, with a manual cash-flow ledger
+ * (fees paid, payouts received). It is independent of the canonical trade engine;
+ * its cash flow is the user's own ledger and never mixes into trade P&L. An
+ * optional link to a trading account lets the UI show that account's realized
+ * performance as read-only context.
+ */
+export type PropAccountStatus = 'evaluation' | 'funded' | 'passed' | 'failed' | 'breached';
+export interface PropAccount {
+  id: string;
+  userId: string;
+  firm: string;
+  program?: string;
+  accountSize?: number;
+  status: PropAccountStatus;
+  phase?: string;
+  profitTarget?: number;
+  maxDrawdown?: number;
+  dailyLossLimit?: number;
+  /** Optional link to a trading account for read-only performance context. */
+  tradingAccountId?: string;
+  startedAt?: number;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type PropTransactionKind = 'evaluation_fee' | 'reset_fee' | 'activation_fee' | 'payout' | 'refund' | 'other';
+export interface PropTransaction {
+  id: string;
+  userId: string;
+  propAccountId: string;
+  timestamp: number;
+  /** Signed: negative is a cost (fees), positive is a credit (payout/refund). */
+  amount: number;
+  kind: PropTransactionKind;
+  note?: string;
+  createdAt: number;
+}
+
 export interface BalanceTransaction {
   id: string;
   accountId: string;

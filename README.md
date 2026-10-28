@@ -34,9 +34,9 @@ performance figure; the UI only renders what the API computes.
   cumulative-P&L chart, calendar heatmap, Health Score, recent trades), Trade Log
   (search/filter/sort/paginate), Trade Detail (executions + annotation editor), Add Trade,
   Journal, Notebook, Reports (all M3 dimensions), **Playbooks** (documented setups + per-playbook
-  analytics), **Insights** (behavioral-pattern flags), **Progress Tracker** (goals + discipline), CSV Import,
-  and Settings. Responsive desktop/mobile, light/dark, keyboard-friendly, with explicit
-  loading/error/empty states and an opt-in Demo mode.
+  analytics), **Insights** (behavioral-pattern flags), **Prop Firms** (manual prop-firm tracking),
+  **Progress Tracker** (goals + discipline), CSV Import, and Settings. Responsive desktop/mobile,
+  light/dark, keyboard-friendly, with explicit loading/error/empty states and an opt-in Demo mode.
 - **Progress Tracker** (`src/analytics/progress.ts`, `web/src/pages/ProgressTracker.tsx`): per-period
   goals (daily/weekly/monthly) for performance metrics (net P&L, trades, win rate, average R-multiple,
   green-day rate) and behavioral/discipline metrics (average day rating, journaling rate, recorded
@@ -152,10 +152,18 @@ Heuristic behavioral flags computed from the user's own closed trades, execution
 - `GET /accounts/:id/insights?tz=&from=&to=` with optional threshold overrides (`overtradingPerDay`, `lossStreak`, `revengeWindowMin`, `revengeSizeMultiple`, `oversizedLossMultiple`). Owner-scoped. Returns `{ insights, summary, thresholds, closedTrades }`.
 - Detected patterns: overtrading, losing streak, revenge trade, oversized loss, losing trade without a recorded stop, and un-journaled trading day. Thresholds and formulas are documented at the top of `src/analytics/insights.ts`. MFE-dependent patterns (premature exit, missed scaling) are not implemented because that data is not captured.
 
+### Prop-firm tracking (M6.4)
+Manual tracking of prop-firm evaluations and funded accounts, user-scoped, independent of the trade engine (the cash-flow ledger is the user's own record and never mixes into trade P&L).
+- `GET /propfirm/summary` - portfolio totals (fees paid, payouts, net) and status counts.
+- `GET /propfirm/accounts?status=`, `POST /propfirm/accounts`, `GET/PUT/DELETE /propfirm/accounts/:id`.
+- `POST /propfirm/accounts/:id/transactions` (signed amount: negative fee, positive payout), `DELETE /propfirm/transactions/:id`.
+- Deleting a prop account removes only its own ledger entries; no trade, execution, or annotation is affected. Plaid/bank sync is out of scope (manual entry).
+
 ### Database
 SQLite via `node:sqlite`, evolved through additive migrations tracked by `PRAGMA user_version`:
 v1 core (accounts, executions, trade_annotations, strategies, tags, journal_entries, balance_transactions, notes),
-v2 auth (users, sessions, ownership columns), v3 query indexes, v4 saved_filters, v5 goals, v6 playbooks.
+v2 auth (users, sessions, ownership columns), v3 query indexes, v4 saved_filters, v5 goals, v6 playbooks,
+v7 prop_accounts + prop_transactions.
 Trade-to-playbook association and per-trade playbook execution records live in the trade_annotations JSON (no migration).
 
 ### Value projections (display units)
@@ -180,6 +188,6 @@ The Trade Log "Show P&L in" selector reprojects values **without touching the P&
 M3 reporting (done), M4 persistence + REST API (done), M5 web UI (done), and the **M5 hardening pass**
 (Stage 1 auth + ownership (done), Stage 2 server-side querying (done), Stage 3 saved filters (done),
 Stage 4 value projections (done)) are done, plus **M6.1 Progress Tracker (done)**, **M6.2 Playbooks (done)**,
-and **M6.3 Insights (done)**. Next: M6.4+ prop-firm tracking, backtesting/replay, plus deployment hardening
-(TLS, rate-limiting, instrument-metadata config for ticks/pips).
+**M6.3 Insights (done)**, and **M6.4 Prop-firm tracking (done)**. Next: M6.5+ backtesting/replay, plus
+deployment hardening (TLS, rate-limiting, instrument-metadata config for ticks/pips).
 See `docs/03-implementation-plan.md`.

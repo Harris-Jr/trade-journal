@@ -9,10 +9,10 @@
  * cannot be probed. Strategies, tags and saved filters are user-scoped.
  */
 import http from 'node:http';
-import type { Repository, SavedFilterScope } from '../db/repository.js';
+import type { Repository, SavedFilterScope, PropAccountData } from '../db/repository.js';
 import type { ReportDimension, SortBy } from '../analytics/reports.js';
 import type { ImportDefaults } from '../import/genericCsv.js';
-import type { GoalMetric, GoalPeriod, GoalDirection, GoalStatus } from '../domain/types.js';
+import type { GoalMetric, GoalPeriod, GoalDirection, GoalStatus, PropAccountStatus, PropTransactionKind } from '../domain/types.js';
 import { METRIC_DEFS, validateGoalTarget } from '../analytics/progress.js';
 import { hashPassword, verifyPassword, newToken } from '../auth/password.js';
 
@@ -491,7 +491,78 @@ const routes: Route[] = [
         byMonth: a.byMonth.map((r) => ({ ...r, stats: serializeStats(r.stats as unknown as Record<string, unknown>) })),
       });
     } },
+
+  // ---- prop-firm tracking (user-scoped; M6.4) ----
+  { method: 'GET', pattern: /^\/propfirm\/summary$/, handler: (c) => ok(c, c.repo.getPropSummary(c.userId)) },
+  { method: 'GET', pattern: /^\/propfirm\/accounts$/, handler: (c) => {
+      const statusQ = c.query.get('status');
+      if (statusQ && !PROP_STATUSES.includes(statusQ)) return badRequest(c, `status must be one of: ${PROP_STATUSES.join(', ')}`);
+      const list = c.repo.listPropAccounts(c.userId, statusQ ? { status: statusQ as PropAccountStatus } : {});
+      ok(c, list.map((a) => ({ ...a, totals: c.repo.propAccountTotals(a.id) })));
+    } },
+  { method: 'POST', pattern: /^\/propfirm\/accounts$/, handler: (c) => {
+      const data = parsePropAccountBody(c, true);
+      if ('error' in data) return badRequest(c, data.error);
+      created(c, c.repo.createPropAccount(c.userId, data.value));
+    } },
+  { method: 'GET', pattern: /^\/propfirm\/accounts\/(?<pid>[^/]+)$/, handler: (c) => {
+      const a = c.repo.getPropAccount(decodeURIComponent(c.params.pid!));
+      if (!a || a.userId !== c.userId) return notFound(c, 'prop account not found');
+      ok(c, { ...a, totals: c.repo.propAccountTotals(a.id), transactions: c.repo.listPropTransactions(a.id) });
+    } },
+  { method: 'PUT', pattern: /^\/propfirm\/accounts\/(?<pid>[^/]+)$/, handler: (c) => {
+      const a = c.repo.getPropAccount(decodeURIComponent(c.params.pid!));
+      if (!a || a.userId !== c.userId) return notFound(c, 'prop account not found');
+      const data = parsePropAccountBody(c, false);
+      if ('error' in data) return badRequest(c, data.error);
+      ok(c, c.repo.updatePropAccount(a.id, data.value));
+    } },
+  { method: 'DELETE', pattern: /^\/propfirm\/accounts\/(?<pid>[^/]+)$/, handler: (c) => {
+      const a = c.repo.getPropAccount(decodeURIComponent(c.params.pid!));
+      if (!a || a.userId !== c.userId) return notFound(c, 'prop account not found');
+      ok(c, { deleted: c.repo.deletePropAccount(a.id) });
+    } },
+  { method: 'POST', pattern: /^\/propfirm\/accounts\/(?<pid>[^/]+)\/transactions$/, handler: (c) => {
+      const a = c.repo.getPropAccount(decodeURIComponent(c.params.pid!));
+      if (!a || a.userId !== c.userId) return notFound(c, 'prop account not found');
+      const b = c.body as any;
+      if (typeof b?.amount !== 'number' || !Number.isFinite(b.amount)) return badRequest(c, 'amount must be a finite number (negative for a fee, positive for a payout)');
+      if (!PROP_TX_KINDS.includes(b?.kind)) return badRequest(c, `kind must be one of: ${PROP_TX_KINDS.join(', ')}`);
+      if (b.timestamp !== undefined && (typeof b.timestamp !== 'number' || !Number.isFinite(b.timestamp))) return badRequest(c, 'timestamp must be epoch ms');
+      created(c, c.repo.addPropTransaction(c.userId, a.id, { amount: b.amount, kind: b.kind, note: typeof b.note === 'string' ? b.note : undefined, timestamp: b.timestamp }));
+    } },
+  { method: 'DELETE', pattern: /^\/propfirm\/transactions\/(?<tid>[^/]+)$/, handler: (c) => {
+      const t = c.repo.getPropTransaction(decodeURIComponent(c.params.tid!));
+      if (!t || t.userId !== c.userId) return notFound(c, 'transaction not found');
+      ok(c, { deleted: c.repo.deletePropTransaction(t.id) });
+    } },
 ];
+
+const PROP_STATUSES = ['evaluation', 'funded', 'passed', 'failed', 'breached'];
+const PROP_TX_KINDS = ['evaluation_fee', 'reset_fee', 'activation_fee', 'payout', 'refund', 'other'];
+
+/** Validate and extract writable prop-account fields. Firm is required on create. */
+function parsePropAccountBody(c: Ctx, requireFirm: boolean): { value: PropAccountData } | { error: string } {
+  const b = c.body;
+  if (typeof b !== 'object' || b === null) return { error: 'expected a prop account object' };
+  const o = b as Record<string, unknown>;
+  if (requireFirm && (typeof o.firm !== 'string' || !o.firm.trim())) return { error: 'firm is required' };
+  if (o.firm !== undefined && (typeof o.firm !== 'string' || !o.firm.trim())) return { error: 'firm must be a non-empty string' };
+  if (o.status !== undefined && !PROP_STATUSES.includes(String(o.status))) return { error: `status must be one of: ${PROP_STATUSES.join(', ')}` };
+  for (const k of ['accountSize', 'profitTarget', 'maxDrawdown', 'dailyLossLimit', 'startedAt'] as const) {
+    if (o[k] !== undefined && o[k] !== null && (typeof o[k] !== 'number' || !Number.isFinite(o[k] as number))) return { error: `${k} must be a number` };
+  }
+  if (o.tradingAccountId !== undefined && o.tradingAccountId !== null && o.tradingAccountId !== '') {
+    if (c.repo.getAccountOwner(String(o.tradingAccountId)) !== c.userId) return { error: 'tradingAccountId is not an account you own' };
+  }
+  const value = {} as PropAccountData;
+  if (o.firm !== undefined) value.firm = (o.firm as string).trim();
+  for (const k of ['program', 'phase', 'notes'] as const) if (typeof o[k] === 'string') (value as Record<string, unknown>)[k] = o[k];
+  for (const k of ['accountSize', 'profitTarget', 'maxDrawdown', 'dailyLossLimit', 'startedAt'] as const) if (typeof o[k] === 'number') (value as Record<string, unknown>)[k] = o[k];
+  if (o.status !== undefined) value.status = String(o.status) as PropAccountStatus;
+  if (o.tradingAccountId !== undefined) (value as Record<string, unknown>).tradingAccountId = o.tradingAccountId === '' || o.tradingAccountId === null ? undefined : String(o.tradingAccountId);
+  return { value };
+}
 
 const PLAYBOOK_DIRECTIONS = ['long', 'short', 'both'];
 

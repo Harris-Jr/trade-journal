@@ -57,6 +57,12 @@ export {
   type InsightsResult,
 } from './analytics/insights.js';
 export {
+  propSummary,
+  accountTotals,
+  type PropSummary,
+  type PropAccountTotals,
+} from './analytics/propfirm.js';
+export {
   report,
   groupBy,
   reportByDay,

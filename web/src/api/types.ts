@@ -249,6 +249,16 @@ export interface Api {
 
   // Insights (M6.3)
   getInsights(accountId: string, opts?: { range?: DateRange; tz?: string; thresholds?: Partial<InsightThresholds> }): Promise<InsightsResult>;
+
+  // Prop-firm tracking (M6.4)
+  getPropSummary(): Promise<PropSummary>;
+  listPropAccounts(status?: PropAccountStatus): Promise<PropAccountWithTotals[]>;
+  getPropAccount(id: string): Promise<PropAccountDetail>;
+  createPropAccount(data: PropAccountData): Promise<PropAccount>;
+  updatePropAccount(id: string, patch: Partial<PropAccountData>): Promise<PropAccount>;
+  deletePropAccount(id: string): Promise<{ deleted: boolean }>;
+  addPropTransaction(accountId: string, tx: { amount: number; kind: PropTransactionKind; note?: string; timestamp?: number }): Promise<PropTransaction>;
+  deletePropTransaction(txId: string): Promise<{ deleted: boolean }>;
 }
 
 export type SavedFilterScope = 'trades' | 'reports';
@@ -321,4 +331,25 @@ export interface InsightThresholds {
 export interface InsightsResult {
   insights: Insight[]; summary: { type: InsightType; count: number }[];
   thresholds: InsightThresholds; closedTrades: number;
+}
+
+// --- Prop-firm tracking (M6.4) ---
+export type PropAccountStatus = 'evaluation' | 'funded' | 'passed' | 'failed' | 'breached';
+export type PropTransactionKind = 'evaluation_fee' | 'reset_fee' | 'activation_fee' | 'payout' | 'refund' | 'other';
+export interface PropAccount {
+  id: string; userId: string; firm: string; program?: string; accountSize?: number;
+  status: PropAccountStatus; phase?: string; profitTarget?: number; maxDrawdown?: number; dailyLossLimit?: number;
+  tradingAccountId?: string; startedAt?: number; notes?: string; createdAt: number; updatedAt: number;
+}
+export interface PropTransaction {
+  id: string; userId: string; propAccountId: string; timestamp: number;
+  amount: number; kind: PropTransactionKind; note?: string; createdAt: number;
+}
+export interface PropAccountTotals { propAccountId: string; cost: number; payout: number; net: number; transactions: number }
+export type PropAccountWithTotals = PropAccount & { totals: PropAccountTotals };
+export type PropAccountDetail = PropAccount & { totals: PropAccountTotals; transactions: PropTransaction[] };
+export type PropAccountData = Omit<PropAccount, 'id' | 'userId' | 'status' | 'createdAt' | 'updatedAt'> & { status?: PropAccountStatus };
+export interface PropSummary {
+  accounts: number; cost: number; payout: number; net: number;
+  byStatus: { status: PropAccountStatus; count: number }[]; perAccount: PropAccountTotals[];
 }

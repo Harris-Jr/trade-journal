@@ -31,6 +31,10 @@ import type {
   GoalStatus,
   Playbook,
   PlaybookStatus,
+  PropAccount,
+  PropAccountStatus,
+  PropTransaction,
+  PropTransactionKind,
 } from '../domain/types.js';
 import { buildTrades, applyAnnotations } from '../metrics/trade.js';
 import { computeStats, equityCurve, type TradeStats, type EquityPoint } from '../metrics/stats.js';
@@ -39,6 +43,7 @@ import { report, type ReportDimension, type BreakdownRow, type SortBy } from '..
 import { evaluateGoal, type GoalProgress } from '../analytics/progress.js';
 import { playbookAnalytics, type PlaybookAnalytics } from '../analytics/playbook.js';
 import { computeInsights, type InsightsResult, type InsightThresholds } from '../analytics/insights.js';
+import { propSummary, accountTotals, type PropSummary, type PropAccountTotals } from '../analytics/propfirm.js';
 import { importExecutionsFromCsv, type ColumnMapping, type ImportDefaults, type RowError } from '../import/genericCsv.js';
 
 // --- versioned, additive migrations (tracked via PRAGMA user_version) ---
@@ -131,7 +136,24 @@ CREATE TABLE IF NOT EXISTS playbooks (
 CREATE INDEX IF NOT EXISTS idx_playbooks_user ON playbooks(user_id, status);
 `;
 
-const MIGRATIONS = [MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6];
+// v7 (M6.4): manual prop-firm tracking (accounts + cash-flow ledger).
+const MIGRATION_V7 = `
+CREATE TABLE IF NOT EXISTS prop_accounts (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, firm TEXT NOT NULL, program TEXT,
+  account_size REAL, status TEXT NOT NULL DEFAULT 'evaluation', phase TEXT,
+  profit_target REAL, max_drawdown REAL, daily_loss_limit REAL,
+  trading_account_id TEXT, started_at INTEGER, notes TEXT,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_prop_accounts_user ON prop_accounts(user_id, status);
+CREATE TABLE IF NOT EXISTS prop_transactions (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, prop_account_id TEXT NOT NULL,
+  timestamp INTEGER NOT NULL, amount REAL NOT NULL, kind TEXT NOT NULL, note TEXT, created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_prop_txns_account ON prop_transactions(prop_account_id, timestamp);
+`;
+
+const MIGRATIONS = [MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7];
 
 export class Repository {
   readonly db: DatabaseSync;
@@ -663,6 +685,72 @@ export class Repository {
     return playbookAnalytics(linked, pb, tz);
   }
 
+  // ---- prop-firm accounts and ledger (user-scoped; M6.4) ----
+  createPropAccount(userId: string, p: PropAccountData): PropAccount {
+    const id = randomUUID();
+    const now = Date.now();
+    this.db.prepare(
+      `INSERT INTO prop_accounts (id,user_id,firm,program,account_size,status,phase,profit_target,max_drawdown,
+        daily_loss_limit,trading_account_id,started_at,notes,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(id, userId, p.firm, p.program ?? null, p.accountSize ?? null, p.status ?? 'evaluation', p.phase ?? null,
+      p.profitTarget ?? null, p.maxDrawdown ?? null, p.dailyLossLimit ?? null, p.tradingAccountId ?? null,
+      p.startedAt ?? null, p.notes ?? null, now, now);
+    return this.getPropAccount(id)!;
+  }
+  listPropAccounts(userId: string, opts: { status?: PropAccountStatus } = {}): PropAccount[] {
+    const rows = opts.status
+      ? this.db.prepare('SELECT * FROM prop_accounts WHERE user_id=? AND status=? ORDER BY created_at DESC').all(userId, opts.status)
+      : this.db.prepare('SELECT * FROM prop_accounts WHERE user_id=? ORDER BY created_at DESC').all(userId);
+    return (rows as Record<string, unknown>[]).map(rowToPropAccount);
+  }
+  getPropAccount(id: string): PropAccount | null {
+    const r = this.db.prepare('SELECT * FROM prop_accounts WHERE id=?').get(id) as Record<string, unknown> | undefined;
+    return r ? rowToPropAccount(r) : null;
+  }
+  updatePropAccount(id: string, patch: Partial<PropAccountData>): PropAccount | null {
+    const cur = this.getPropAccount(id);
+    if (!cur) return null;
+    const n = { ...cur, ...patch };
+    this.db.prepare(
+      `UPDATE prop_accounts SET firm=?, program=?, account_size=?, status=?, phase=?, profit_target=?, max_drawdown=?,
+        daily_loss_limit=?, trading_account_id=?, started_at=?, notes=?, updated_at=? WHERE id=?`,
+    ).run(n.firm, n.program ?? null, n.accountSize ?? null, n.status, n.phase ?? null, n.profitTarget ?? null,
+      n.maxDrawdown ?? null, n.dailyLossLimit ?? null, n.tradingAccountId ?? null, n.startedAt ?? null, n.notes ?? null, Date.now(), id);
+    return this.getPropAccount(id);
+  }
+  /** Delete a prop account and its own cash-flow ledger (which is user-entered, not trade history). */
+  deletePropAccount(id: string): boolean {
+    this.db.prepare('DELETE FROM prop_transactions WHERE prop_account_id=?').run(id);
+    return Number(this.db.prepare('DELETE FROM prop_accounts WHERE id=?').run(id).changes) > 0;
+  }
+  addPropTransaction(userId: string, propAccountId: string, t: { timestamp?: number; amount: number; kind: PropTransactionKind; note?: string }): PropTransaction {
+    const id = randomUUID();
+    const now = Date.now();
+    const ts = t.timestamp ?? now;
+    this.db.prepare('INSERT INTO prop_transactions (id,user_id,prop_account_id,timestamp,amount,kind,note,created_at) VALUES (?,?,?,?,?,?,?,?)')
+      .run(id, userId, propAccountId, ts, t.amount, t.kind, t.note ?? null, now);
+    return { id, userId, propAccountId, timestamp: ts, amount: t.amount, kind: t.kind, note: t.note, createdAt: now };
+  }
+  listPropTransactions(propAccountId: string): PropTransaction[] {
+    return (this.db.prepare('SELECT * FROM prop_transactions WHERE prop_account_id=? ORDER BY timestamp DESC, created_at DESC').all(propAccountId) as Record<string, unknown>[]).map(rowToPropTransaction);
+  }
+  getPropTransaction(id: string): PropTransaction | null {
+    const r = this.db.prepare('SELECT * FROM prop_transactions WHERE id=?').get(id) as Record<string, unknown> | undefined;
+    return r ? rowToPropTransaction(r) : null;
+  }
+  deletePropTransaction(id: string): boolean {
+    return Number(this.db.prepare('DELETE FROM prop_transactions WHERE id=?').run(id).changes) > 0;
+  }
+  propAccountTotals(propAccountId: string): PropAccountTotals {
+    return accountTotals(propAccountId, this.listPropTransactions(propAccountId));
+  }
+  getPropSummary(userId: string): PropSummary {
+    const accounts = this.listPropAccounts(userId);
+    const txns = (this.db.prepare('SELECT * FROM prop_transactions WHERE user_id=?').all(userId) as Record<string, unknown>[]).map(rowToPropTransaction);
+    return propSummary(accounts, txns);
+  }
+
   /** Current balance = starting balance + realized net P&L + balance transactions. */
   getAccountBalance(accountId: string): number {
     const acct = this.getAccount(accountId);
@@ -713,6 +801,28 @@ export interface SavedFilter {
 
 /** Writable playbook fields (everything except server-managed id/userId/status/timestamps). */
 export type PlaybookData = Omit<Playbook, 'id' | 'userId' | 'status' | 'createdAt' | 'updatedAt'>;
+
+/** Writable prop-account fields; status is optional on create (defaults to evaluation). */
+export type PropAccountData = Omit<PropAccount, 'id' | 'userId' | 'status' | 'createdAt' | 'updatedAt'> & { status?: PropAccountStatus };
+
+function rowToPropAccount(r: Record<string, unknown>): PropAccount {
+  const n = (v: unknown): number | undefined => (v == null ? undefined : Number(v));
+  const s = (v: unknown): string | undefined => (v == null ? undefined : String(v));
+  return {
+    id: String(r.id), userId: String(r.user_id), firm: String(r.firm), program: s(r.program),
+    accountSize: n(r.account_size), status: String(r.status) as PropAccountStatus, phase: s(r.phase),
+    profitTarget: n(r.profit_target), maxDrawdown: n(r.max_drawdown), dailyLossLimit: n(r.daily_loss_limit),
+    tradingAccountId: s(r.trading_account_id), startedAt: n(r.started_at), notes: s(r.notes),
+    createdAt: Number(r.created_at), updatedAt: Number(r.updated_at),
+  };
+}
+function rowToPropTransaction(r: Record<string, unknown>): PropTransaction {
+  return {
+    id: String(r.id), userId: String(r.user_id), propAccountId: String(r.prop_account_id),
+    timestamp: Number(r.timestamp), amount: Number(r.amount), kind: String(r.kind) as PropTransactionKind,
+    note: r.note == null ? undefined : String(r.note), createdAt: Number(r.created_at),
+  };
+}
 
 const jstr = (v: unknown): string | null => (v === undefined || v === null ? null : JSON.stringify(v));
 const jparse = <T>(v: unknown): T | undefined => (v == null ? undefined : (JSON.parse(String(v)) as T));
