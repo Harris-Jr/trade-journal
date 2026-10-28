@@ -1,0 +1,26 @@
+{
+  "name": "trade-journal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Independent, clean-room trading journal — analytical core (domain model, metrics engine, CSV import).",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node dist/server/main.js",
+    "demo": "node examples/demo.mjs",
+    "dev:all": "node scripts/dev.mjs",
+    "web:install": "npm --prefix web install",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build",
+    "web:test": "npm --prefix web test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
