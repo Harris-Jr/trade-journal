@@ -107,6 +107,20 @@ from public evidence. UI and advanced modules layer on top.
   delete), a reusable playbook form sheet, Trade Detail playbook assignment with pre-trade intent,
   checklist and post-trade review, and a Trade Log playbook filter. Fixed no app bugs this milestone.
 
+### M6.3 - Insights (done)
+- Behavioral-pattern detection (`src/analytics/insights.ts`) from the user's own closed trades,
+  executions and journal via the canonical engine. Transparent, documented, adjustable thresholds;
+  no fabrication; framed as description, not advice or proof of causation.
+- Patterns: overtrading (trades/day over a threshold), losing streak (consecutive losers in a day),
+  revenge trade (upsized entry shortly after a loss), oversized loss (loss far above the average loss),
+  losing trade without a recorded stop (undefined risk), and un-journaled trading day. MFE-dependent
+  patterns (premature exit, missed scaling) are intentionally omitted since that data is not captured.
+- API: `GET /accounts/:id/insights?tz=&from=&to=` plus optional threshold overrides
+  (overtradingPerDay, lossStreak, revengeWindowMin, revengeSizeMultiple, oversizedLossMultiple),
+  owner-scoped; returns the insight list, a per-type summary, the thresholds used, and closed-trade count.
+- Web: `/insights` page and nav entry with severity-grouped flags, a per-type summary, drill-through to
+  the flagged trade, honest empty states (no trades vs no flags), and a correlation-not-causation note.
+
 ### M6+ - Advanced modules (prioritized)
 1. Progress Tracker (rule adherence) - high value, low complexity.
 2. Playbook analytics surfacing (M1 already computes per-group stats).

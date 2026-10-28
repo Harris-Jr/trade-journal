@@ -246,6 +246,9 @@ export interface Api {
   restorePlaybook(id: string): Promise<Playbook>;
   deletePlaybook(id: string): Promise<{ deleted: boolean }>;
   getPlaybookAnalytics(accountId: string, playbookId: string, tz?: string): Promise<PlaybookAnalytics>;
+
+  // Insights (M6.3)
+  getInsights(accountId: string, opts?: { range?: DateRange; tz?: string; thresholds?: Partial<InsightThresholds> }): Promise<InsightsResult>;
 }
 
 export type SavedFilterScope = 'trades' | 'reports';
@@ -301,4 +304,21 @@ export interface PlaybookAnalytics {
   linkedClosed: number; linkedOpen: number; stats: TradeStats; breakevenRate: number | null;
   bySymbol: BreakdownRow[]; byDirection: BreakdownRow[]; byMonth: BreakdownRow[];
   checklistAdherence: number | null; reviewCompletionRate: number | null;
+}
+
+// --- Insights (M6.3) ---
+export type InsightType = 'overtrading' | 'loss_streak' | 'revenge_trade' | 'oversized_loss' | 'no_stop_loss' | 'unjournaled_day';
+export type InsightLevel = 'trade' | 'day';
+export type InsightSeverity = 'low' | 'medium' | 'high';
+export interface Insight {
+  id: string; type: InsightType; level: InsightLevel; severity: InsightSeverity;
+  title: string; detail: string; tradeId?: string; symbol?: string; date?: string; value?: number;
+}
+export interface InsightThresholds {
+  overtradingPerDay: number; lossStreak: number; revengeWindowMin: number;
+  revengeSizeMultiple: number; oversizedLossMultiple: number;
+}
+export interface InsightsResult {
+  insights: Insight[]; summary: { type: InsightType; count: number }[];
+  thresholds: InsightThresholds; closedTrades: number;
 }

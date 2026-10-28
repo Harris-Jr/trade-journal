@@ -5,6 +5,7 @@ import type {
   Paginated, ListOpts, TradeQueryOpts, ExecutionQueryOpts, SavedFilter, SavedFilterScope,
   Goal, GoalWithProgress, GoalInput, GoalPatch,
   Playbook, PlaybookDetail, PlaybookData, PlaybookListOpts, PlaybookAnalytics,
+  InsightsResult, InsightThresholds,
 } from './types.js';
 
 export class ApiError extends Error {
@@ -149,6 +150,15 @@ export const httpApi: Api = {
   deletePlaybook: (id) => request<{ deleted: boolean }>('DELETE', `/playbooks/${encodeURIComponent(id)}`),
   getPlaybookAnalytics: (accountId, playbookId, tz?: string) =>
     request<PlaybookAnalytics>('GET', `/accounts/${accountId}/playbooks/${encodeURIComponent(playbookId)}/analytics${qs({ tz })}`),
+
+  getInsights: (accountId, opts) => {
+    const th = (opts?.thresholds ?? {}) as Partial<InsightThresholds>;
+    return request<InsightsResult>('GET', `/accounts/${accountId}/insights${qs({
+      from: opts?.range?.from, to: opts?.range?.to, tz: opts?.tz,
+      overtradingPerDay: th.overtradingPerDay, lossStreak: th.lossStreak, revengeWindowMin: th.revengeWindowMin,
+      revengeSizeMultiple: th.revengeSizeMultiple, oversizedLossMultiple: th.oversizedLossMultiple,
+    })}`);
+  },
 };
 
 export type { Api, AccountKind, ExecutionInput, InstrumentType, ReportDimension, SortBy, TradeAnnotations };

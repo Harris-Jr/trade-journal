@@ -146,6 +146,21 @@ describe('Demo-mode happy path', () => {
     await user.click(within(dialog).getByRole('button', { name: /Create playbook/i }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(/name is required/i);
   });
+
+  it('renders the Insights page from real computed data (M6.3)', async () => {
+    window.history.pushState({}, '', '/insights');
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: /Insights/i })).toBeInTheDocument();
+    // The seeded demo trades produce at least one behavioral flag or an honest empty state.
+    await waitFor(() => {
+      const hasFlags = screen.queryByText(/flag\(s\) across/i);
+      const emptyFlags = screen.queryByText(/No behavioral flags in this range/i);
+      const emptyTrades = screen.queryByText(/No closed trades in this range/i);
+      expect(hasFlags || emptyFlags || emptyTrades).toBeTruthy();
+    });
+    // Never silently shows fabricated data: no error alert in the happy path.
+    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
+  });
 });
 
 describe('API error state (authenticated session, data fetch fails)', () => {

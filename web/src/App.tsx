@@ -13,6 +13,7 @@ import { Reports } from './pages/Reports.js';
 import { ProgressTracker } from './pages/ProgressTracker.js';
 import { Playbooks } from './pages/Playbooks.js';
 import { PlaybookDetail } from './pages/PlaybookDetail.js';
+import { Insights } from './pages/Insights.js';
 import { Import } from './pages/Import.js';
 import { Settings } from './pages/Settings.js';
 
@@ -33,6 +34,7 @@ function Gate(): JSX.Element {
           <Route path="reports" element={<Reports />} />
           <Route path="playbooks" element={<Playbooks />} />
           <Route path="playbooks/:id" element={<PlaybookDetail />} />
+          <Route path="insights" element={<Insights />} />
           <Route path="progress" element={<ProgressTracker />} />
           <Route path="import" element={<Import />} />
           <Route path="settings" element={<Settings />} />

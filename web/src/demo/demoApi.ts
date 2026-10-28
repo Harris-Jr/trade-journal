@@ -11,6 +11,7 @@ import { report } from '@core/analytics/reports.js';
 import { importExecutionsFromCsv } from '@core/import/genericCsv.js';
 import { evaluateGoal, METRIC_DEFS } from '@core/analytics/progress.js';
 import { playbookAnalytics } from '@core/analytics/playbook.js';
+import { computeInsights } from '@core/analytics/insights.js';
 import type { Execution as CoreExecution } from '@core/domain/types.js';
 import type {
   Goal, GoalWithProgress, GoalInput, GoalPatch,
@@ -381,6 +382,12 @@ export function createDemoApi(): Api {
         byDirection: a.byDirection.map((r) => ({ ...r, stats: statsToApi(r.stats) })),
         byMonth: a.byMonth.map((r) => ({ ...r, stats: statsToApi(r.stats) })),
       } as unknown as PlaybookAnalytics);
+    },
+
+    getInsights: (accountId, opts) => {
+      const t = trades(accountId, opts?.range);
+      const jrn = journal.filter((jj) => jj.accountId === accountId);
+      return delay(computeInsights(t as never, jrn as never, opts?.tz ?? 'UTC', opts?.thresholds ?? {}) as unknown as import('../api/types.js').InsightsResult);
     },
   };
 

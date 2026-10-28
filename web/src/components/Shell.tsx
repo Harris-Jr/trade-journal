@@ -1,7 +1,7 @@
 import { useEffect, useState, type ComponentType } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, List, PlusCircle, PenLine, NotebookText, BarChart3, Target, BookOpen, Upload, Settings as SettingsIcon,
+  LayoutDashboard, List, PlusCircle, PenLine, NotebookText, BarChart3, Target, BookOpen, Lightbulb, Upload, Settings as SettingsIcon,
   Menu, Moon, Sun, Monitor, type LucideProps,
 } from 'lucide-react';
 import { useApp } from '../state/app.js';
@@ -17,6 +17,7 @@ const NAV: { to: string; label: string; Icon: ComponentType<LucideProps>; end?: 
   { to: '/notebook', label: 'Notebook', Icon: NotebookText },
   { to: '/reports', label: 'Reports', Icon: BarChart3 },
   { to: '/playbooks', label: 'Playbooks', Icon: BookOpen },
+  { to: '/insights', label: 'Insights', Icon: Lightbulb },
   { to: '/progress', label: 'Progress', Icon: Target },
   { to: '/import', label: 'Import', Icon: Upload },
   { to: '/settings', label: 'Settings', Icon: SettingsIcon },

@@ -38,6 +38,7 @@ import { healthScore, type HealthScore } from '../metrics/healthScore.js';
 import { report, type ReportDimension, type BreakdownRow, type SortBy } from '../analytics/reports.js';
 import { evaluateGoal, type GoalProgress } from '../analytics/progress.js';
 import { playbookAnalytics, type PlaybookAnalytics } from '../analytics/playbook.js';
+import { computeInsights, type InsightsResult, type InsightThresholds } from '../analytics/insights.js';
 import { importExecutionsFromCsv, type ColumnMapping, type ImportDefaults, type RowError } from '../import/genericCsv.js';
 
 // --- versioned, additive migrations (tracked via PRAGMA user_version) ---
@@ -647,6 +648,13 @@ export class Repository {
     }
     return n;
   }
+  /** Behavioral insights over an account's trades in a range (canonical, heuristic). */
+  getInsights(accountId: string, opts: { range?: DateRange; tz?: string; thresholds?: Partial<InsightThresholds> } = {}): InsightsResult {
+    const trades = this.getTrades(accountId, opts.range);
+    const journal = this.listJournal(accountId);
+    return computeInsights(trades, journal, opts.tz ?? 'UTC', opts.thresholds ?? {});
+  }
+
   /** Playbook analytics over a single account's linked trades (canonical engine). */
   getPlaybookAnalytics(accountId: string, playbookId: string, tz = 'UTC'): PlaybookAnalytics | null {
     const pb = this.getPlaybook(playbookId);

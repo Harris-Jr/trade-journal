@@ -49,6 +49,14 @@ export {
 export { periodKey, type ProgressPeriod } from './analytics/reports.js';
 export { playbookAnalytics, type PlaybookAnalytics } from './analytics/playbook.js';
 export {
+  computeInsights,
+  DEFAULT_THRESHOLDS,
+  type Insight,
+  type InsightType,
+  type InsightThresholds,
+  type InsightsResult,
+} from './analytics/insights.js';
+export {
   report,
   groupBy,
   reportByDay,

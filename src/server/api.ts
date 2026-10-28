@@ -224,6 +224,19 @@ const routes: Route[] = [
       if (!requireOwner(c)) return;
       ok(c, c.repo.getEquity(c.params.id!, parseRange(c)));
     } },
+  { method: 'GET', pattern: /^\/accounts\/(?<id>[^/]+)\/insights$/, handler: (c) => {
+      if (!requireOwner(c)) return;
+      const tz = c.query.get('tz') ?? 'UTC';
+      const thresholds: Record<string, number> = {};
+      for (const key of ['overtradingPerDay', 'lossStreak', 'revengeWindowMin', 'revengeSizeMultiple', 'oversizedLossMultiple']) {
+        const v = c.query.get(key);
+        if (v !== null) {
+          if (!/^\d+(\.\d+)?$/.test(v)) return badRequest(c, `${key} must be a non-negative number`);
+          thresholds[key] = Number(v);
+        }
+      }
+      ok(c, c.repo.getInsights(c.params.id!, { range: parseRange(c), tz, thresholds }));
+    } },
   { method: 'GET', pattern: /^\/accounts\/(?<id>[^/]+)\/reports$/, handler: (c) => {
       if (!requireOwner(c)) return;
       const by = c.query.get('by') as ReportDimension | null;

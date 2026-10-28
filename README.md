@@ -34,8 +34,9 @@ performance figure; the UI only renders what the API computes.
   cumulative-P&L chart, calendar heatmap, Health Score, recent trades), Trade Log
   (search/filter/sort/paginate), Trade Detail (executions + annotation editor), Add Trade,
   Journal, Notebook, Reports (all M3 dimensions), **Playbooks** (documented setups + per-playbook
-  analytics), **Progress Tracker** (goals + discipline), CSV Import, and Settings. Responsive
-  desktop/mobile, light/dark, keyboard-friendly, with explicit loading/error/empty states and an opt-in Demo mode.
+  analytics), **Insights** (behavioral-pattern flags), **Progress Tracker** (goals + discipline), CSV Import,
+  and Settings. Responsive desktop/mobile, light/dark, keyboard-friendly, with explicit
+  loading/error/empty states and an opt-in Demo mode.
 - **Progress Tracker** (`src/analytics/progress.ts`, `web/src/pages/ProgressTracker.tsx`): per-period
   goals (daily/weekly/monthly) for performance metrics (net P&L, trades, win rate, average R-multiple,
   green-day rate) and behavioral/discipline metrics (average day rating, journaling rate, recorded
@@ -146,6 +147,11 @@ references, and an active/archived status.
 - Relationship to existing fields: tags are free labels; `setup` is a short text name; `strategyId` is the original lightweight link (kept for the "by strategy" report); `playbookId` is the new first-class link. They are not duplicates.
 - Deletion is refused with 409 while trades are linked; archive or unassign first. Archiving and deleting never modify executions, trade IDs, realized P&L, or annotations beyond the playbook link.
 
+### Insights (M6.3)
+Heuristic behavioral flags computed from the user's own closed trades, executions and journal (canonical engine only; no fabrication; correlation, not causation).
+- `GET /accounts/:id/insights?tz=&from=&to=` with optional threshold overrides (`overtradingPerDay`, `lossStreak`, `revengeWindowMin`, `revengeSizeMultiple`, `oversizedLossMultiple`). Owner-scoped. Returns `{ insights, summary, thresholds, closedTrades }`.
+- Detected patterns: overtrading, losing streak, revenge trade, oversized loss, losing trade without a recorded stop, and un-journaled trading day. Thresholds and formulas are documented at the top of `src/analytics/insights.ts`. MFE-dependent patterns (premature exit, missed scaling) are not implemented because that data is not captured.
+
 ### Database
 SQLite via `node:sqlite`, evolved through additive migrations tracked by `PRAGMA user_version`:
 v1 core (accounts, executions, trade_annotations, strategies, tags, journal_entries, balance_transactions, notes),
@@ -173,7 +179,7 @@ The Trade Log "Show P&L in" selector reprojects values **without touching the P&
 
 M3 reporting (done), M4 persistence + REST API (done), M5 web UI (done), and the **M5 hardening pass**
 (Stage 1 auth + ownership (done), Stage 2 server-side querying (done), Stage 3 saved filters (done),
-Stage 4 value projections (done)) are done, plus **M6.1 Progress Tracker (done)** and **M6.2 Playbooks (done)**.
-Next: M6.3+ insights, prop-firm tracking, backtesting/replay, plus deployment hardening (TLS, rate-limiting,
-instrument-metadata config for ticks/pips).
+Stage 4 value projections (done)) are done, plus **M6.1 Progress Tracker (done)**, **M6.2 Playbooks (done)**,
+and **M6.3 Insights (done)**. Next: M6.4+ prop-firm tracking, backtesting/replay, plus deployment hardening
+(TLS, rate-limiting, instrument-metadata config for ticks/pips).
 See `docs/03-implementation-plan.md`.
